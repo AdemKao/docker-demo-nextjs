@@ -1,34 +1,150 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Nextjs-Docker-Demo
 
-## Getting Started
+- [Nextjs-Docker-Demo](#nextjs-docker-demo)
+  - [Create Next-app](#create-next-app)
+  - [Create Dev Dockerfile](#create-dev-dockerfile)
+  - [Create Dev Docker-compose.yml](#create-dev-docker-composeyml)
+  - [Build/Run dev Docker Container](#buildrun-dev-docker-container)
+  - [Create production Dockerfile](#create-production-dockerfile)
+  - [Add Setting in next.config.js](#add-setting-in-nextconfigjs)
+  - [Create docker-compose.production.yml](#create-docker-composeproductionyml)
+  - [Build/Run Docker Contrainer](#buildrun-docker-contrainer)
+  - [Source](#source)
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
+## Create Next-app
+```
+yarn create next-app next-docker-demo
+cd next-docker-demo
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Create Dev Dockerfile
+```Dockerfile
+FROM node:16-alpine
 
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
+WORKDIR /app
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
+COPY package.json yarn.lock ./
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+RUN yarn install
 
-## Learn More
+COPY next.config.js ./next.config.js
 
-To learn more about Next.js, take a look at the following resources:
+COPY pages ./pages
+COPY public ./public
+COPY styles ./styles
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+CMD ["yarn","dev"]
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+## Create Dev Docker-compose.yml
+```yml
+version: '3'
 
-## Deploy on Vercel
+services:
+  app:
+    image: nextjs-docker-dev
+    build: .
+    ports:
+      - 3000:3000
+    volumes:
+      - ./pages:/app/pages
+      - ./public:/app/public
+      - ./styles:/app/styles
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Build/Run dev Docker Container
+```bash
+docker-compose up --build --force-recreate
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## Create production Dockerfile
+```Dockerfile
+# Step1
+FROM node:16-alpine AS deps
+
+ENV NODE_ENV=production
+
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile
+
+# Step2
+FROM node:16-alpine AS builder
+
+ENV NODE_ENV=production
+
+WORKDIR /app
+
+COPY next.config.js ./
+COPY package.json yarn.lock ./
+COPY --from=deps /app/node_modules ./node_modules
+
+COPY pages ./pages
+COPY public ./public
+COPY styles ./styles
+
+RUN yarn build
+
+# Step3
+FROM node:16-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+CMD ["node","server.js"]
+
+```
+
+## Add Setting in next.config.js
+```js
+const nextConfig = {
+  reactStrictMode: true,
+  swcMinify: true,
+  experimental: {
+    outputStandalone: true,
+  },
+};
+
+```
+
+## Create docker-compose.production.yml
+```yml
+version: '3'
+
+services:
+  app:
+    image: nextjs-docker-production
+    
+    build: 
+      context: ./
+      dockerfile: Dockerfile.production
+    
+    ports:
+      - 3000:3000
+
+```
+
+## Build/Run Docker Contrainer
+```bash
+docker-compose -f docker-compose.production.yml up --build --force-recreate
+```
+
+<hr>
+
+## Source
+[youtube](https://www.youtube.com/watch?v=aNh8iShFXto)
+
+

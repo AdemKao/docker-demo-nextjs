@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  app:
+    image: nextjs-docker-production
+    
+    build: 
+      context: ./
+      dockerfile: Dockerfile.production
+    
+    ports:
+      - 3000:3000
